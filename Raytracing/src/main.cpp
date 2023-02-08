@@ -5,6 +5,8 @@
 #include "Walnut/Timer.h"
 
 #include "Renderer.h"
+
+#include <glm/gtc/type_ptr.hpp>
 using namespace Walnut;
 
 class ExampleLayer : public Walnut::Layer
@@ -19,7 +21,8 @@ public:
 		if(ImGui::Button("Render")){
 			Render();
 		}
-
+		ImGui::InputFloat3("Camera Position", glm::value_ptr(m_Renderer.cameraPos));
+		ImGui::InputFloat3("light Direction", glm::value_ptr(m_Renderer.lightDir));
 		ImGui::End();
 
 		// Viewport window
