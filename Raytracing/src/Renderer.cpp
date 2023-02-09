@@ -31,17 +31,15 @@ void Renderer::onResize(uint32_t width, uint32_t height)
 	m_AspectRatio = (float)width / (float)height;
 }
 
-void Renderer::Render()
+void Renderer::Render(const Camera& camera)
 {
-	//for (int i = 0; i < m_ViewportWidth * m_ViewportHeight; i++) {
-	//	//m_ImageData[i] = 0xff00ff00; // ABGR
-	//	m_ImageData[i] = 0xff000000 | Random::UInt();
-	//}
+	Ray ray;
+	ray.Origin = camera.GetPosition();
+
 	for (uint32_t y = 0; y < m_FinalImage->GetHeight(); y++) {
 		for (uint32_t x = 0; x < m_FinalImage->GetWidth(); x++) {
-			glm::vec2 coord = { (float)x / (float)m_FinalImage->GetWidth(), (float)y / (float)m_FinalImage->GetHeight() };
-			coord = coord * 2.0f - 1.0f;
-			glm::vec4 color = PerPixel(coord);
+			ray.Direction = camera.GetRayDirections()[x + y * m_FinalImage->GetWidth()];
+			glm::vec4 color = TraceRay(ray);
 			color = glm::clamp(color, glm::vec4(0.0f), glm::vec4(1.0f));
 			m_ImageData[x + y * m_FinalImage->GetWidth()] = Utils::ConvertToRGBA(color);
 			
@@ -51,14 +49,13 @@ void Renderer::Render()
 
 }
 
-glm::vec4 Renderer::PerPixel(glm::vec2 coord) {
-	glm::vec3 rayOrigin(cameraPos);
-	glm::vec3 rayDirection(coord.x * m_AspectRatio, coord.y, -1.0f);
+glm::vec4 Renderer::TraceRay(const Ray& ray) {
+
 	float radius = 0.5f;
 
-	float a = glm::dot(rayDirection, rayDirection);
-	float b = glm::dot(rayOrigin, rayDirection) * 2.0f;
-	float c = glm::dot(rayOrigin, rayOrigin) - radius * radius;
+	float a = glm::dot(ray.Direction, ray.Direction);
+	float b = glm::dot(ray.Origin, ray.Direction) * 2.0f;
+	float c = glm::dot(ray.Origin, ray.Origin) - radius * radius;
 
 	float discriminant = b * b - 4.0f * a * c;
 	if (discriminant < 0) {
@@ -72,10 +69,14 @@ glm::vec4 Renderer::PerPixel(glm::vec2 coord) {
 	glm::vec3 hitPoint;
 	
 	if (t0 > 0) {
-		hitPoint = rayOrigin + rayDirection * t0;
+		hitPoint = ray.Origin + ray.Direction * t0;
 	}
 	else if (t1 > 0) {
-		hitPoint = rayOrigin + rayDirection * t1;
+		hitPoint = ray.Origin + ray.Direction * t1;
+	}
+	else {
+		// not hit to sphere
+		return glm::vec4(0, 0, 0, 1);
 	}
 	glm::vec3 normal=glm::normalize(hitPoint);
 
