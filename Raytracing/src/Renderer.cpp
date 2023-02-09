@@ -52,11 +52,13 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 		memset(m_AccumulationData, 0, m_FinalImage->GetWidth() * m_FinalImage->GetHeight() * sizeof(glm::vec4));
 	}
 
-	
+	/*
 	// multi threading
+	// why multi threading is slower?
 	std::for_each(std::execution::par, m_ImageVerticalIter.begin(), m_ImageVerticalIter.end(),
 		[this](uint32_t y) {
-			std::for_each(std::execution::par, m_ImageHorizontalIter.begin(), m_ImageHorizontalIter.end(), [this, y](uint32_t x) {
+			std::for_each(std::execution::par, m_ImageHorizontalIter.begin(), m_ImageHorizontalIter.end(), 
+			[this, y](uint32_t x) {
 
 				glm::vec4 color = PerPixel(x, y);
 				m_AccumulationData[x + y * m_FinalImage->GetWidth()] += color;
@@ -66,8 +68,8 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 				averageColor = glm::clamp(averageColor, glm::vec4(0.0f), glm::vec4(1.0f));
 				m_ImageData[x + y * m_FinalImage->GetWidth()] = Utils::ConvertToRGBA(averageColor);
 			});
-	});
-	/*
+	});*/
+	
 	for (uint32_t y = 0; y < m_FinalImage->GetHeight(); y++) {
 		for (uint32_t x = 0; x < m_FinalImage->GetWidth(); x++) {
 			
@@ -80,7 +82,7 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 			m_ImageData[x + y * m_FinalImage->GetWidth()] = Utils::ConvertToRGBA(averageColor);
 			
 		}
-	}*/
+	}
 
 	m_FinalImage->SetData(m_ImageData);
 
