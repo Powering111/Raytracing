@@ -1,4 +1,5 @@
 #include "Renderer.h"
+#include "Walnut/Random.h"
 
 namespace Utils {
 	static uint32_t ConvertToRGBA(const glm::vec4& color) {
@@ -27,19 +28,16 @@ void Renderer::onResize(uint32_t width, uint32_t height)
 
 	delete[] m_ImageData;
 	m_ImageData = new uint32_t[width * height];
-
-	m_AspectRatio = (float)width / (float)height;
 }
 
-void Renderer::Render(const Camera& camera)
+void Renderer::Render(const Scene& scene, const Camera& camera)
 {
-	Ray ray;
-	ray.Origin = camera.GetPosition();
+	m_ActiveScene = &scene;
+	m_ActiveCamera = &camera;
 
 	for (uint32_t y = 0; y < m_FinalImage->GetHeight(); y++) {
 		for (uint32_t x = 0; x < m_FinalImage->GetWidth(); x++) {
-			ray.Direction = camera.GetRayDirections()[x + y * m_FinalImage->GetWidth()];
-			glm::vec4 color = TraceRay(ray);
+			glm::vec4 color = PerPixel(x,y);
 			color = glm::clamp(color, glm::vec4(0.0f), glm::vec4(1.0f));
 			m_ImageData[x + y * m_FinalImage->GetWidth()] = Utils::ConvertToRGBA(color);
 			
@@ -49,46 +47,95 @@ void Renderer::Render(const Camera& camera)
 
 }
 
-glm::vec4 Renderer::TraceRay(const Ray& ray) {
+glm::vec4 Renderer::PerPixel(uint32_t x, uint32_t y)
+{
+	Ray ray;
+	ray.Origin = m_ActiveCamera->GetPosition();
+	ray.Direction = m_ActiveCamera->GetRayDirections()[x + y * m_FinalImage->GetWidth()];
 
-	float radius = 0.5f;
+	glm::vec3 color(0.0f);
+	int bounces = 4;
+	float multiplier = 0.5f;
+	for (int i = 0; i < bounces; i++) {
+		Renderer::HitPayload payload = TraceRay(ray);
 
-	float a = glm::dot(ray.Direction, ray.Direction);
-	float b = glm::dot(ray.Origin, ray.Direction) * 2.0f;
-	float c = glm::dot(ray.Origin, ray.Origin) - radius * radius;
+		if (payload.HitDistance < 0.0f) {
+			glm::vec3 skyColor = {0.3f,0.3f,0.8f};
+			color += skyColor * multiplier;
+			break;
+		}
 
-	float discriminant = b * b - 4.0f * a * c;
-	if (discriminant < 0) {
-		// not hit to sphere
-		return glm::vec4(0,0,0,1);
+		glm::vec3 lightDirection = glm::normalize(lightDir);
+		float deg = glm::max(glm::dot(payload.WorldNormal, -lightDirection), 0.0f);
+
+		const Sphere& sphere = m_ActiveScene->Spheres[payload.ObjectIndex];
+		const Material& material = m_ActiveScene->Materials[sphere.MaterialIndex];
+		glm::vec3 sphereColor = material.Albedo;
+		sphereColor = sphereColor * deg;
+		color += sphereColor * multiplier;
+		ray.Origin = payload.WorldPosition;
+		ray.Direction = glm::reflect(ray.Direction, payload.WorldNormal + material.Roughness * Walnut::Random::Vec3(-0.5f,0.5f));
+
+		multiplier *= 0.5f;
 	}
+	return glm::vec4(color,1.0f);
+}
 
-	// hit point
-	float t0 = (-b - glm::sqrt(discriminant)) / (a * 2.0f);
-	float t1 = (-b + glm::sqrt(discriminant)) / (a * 2.0f);
-	glm::vec3 hitPoint;
+Renderer::HitPayload Renderer::TraceRay(const Ray& ray) {
+
+	int closestSphere= -1;
+	float hitDistance = INFINITY;
+	for (size_t i = 0; i < m_ActiveScene->Spheres.size();i++) {
+		const Sphere& sphere = m_ActiveScene->Spheres[i];
+		glm::vec3 origin = ray.Origin - sphere.Position;
+		float a = glm::dot(ray.Direction, ray.Direction);
+		float b = glm::dot(origin, ray.Direction) * 2.0f;
+		float c = glm::dot(origin, origin) - sphere.Radius * sphere.Radius;
+
+		float discriminant = b * b - 4.0f * a * c;
+		if (discriminant < 0) {
+			// not hit to sphere
+			continue;
+		}
+
+		// hit point
+		float t0 = (-b - glm::sqrt(discriminant)) / (a * 2.0f);
 	
-	if (t0 > 0) {
-		hitPoint = ray.Origin + ray.Direction * t0;
+		if (t0 > 0 && t0<hitDistance) {
+			hitDistance = t0;
+			closestSphere = (int)i;
+		}
+		else {
+			float t1 = (-b + glm::sqrt(discriminant)) / (a * 2.0f);
+			if (t1 > 0 && t1 < hitDistance) {
+				hitDistance = t1;
+				closestSphere = (int)i;
+			}
+		}
 	}
-	else if (t1 > 0) {
-		hitPoint = ray.Origin + ray.Direction * t1;
-	}
-	else {
-		// not hit to sphere
-		return glm::vec4(0, 0, 0, 1);
-	}
-	glm::vec3 normal=glm::normalize(hitPoint);
+	if (closestSphere<0)
+		return Miss(ray);
+	return ClosestHit(ray, hitDistance, closestSphere);
 
-	glm::vec3 lightDirection = glm::normalize(lightDir);
-
-	float deg = glm::max(glm::dot(normal, -lightDirection), 0.0f);
-
-	glm::vec3 sphereColor(0, 1, 0);
-	sphereColor = sphereColor * deg;
-
-	//sphereColor = (normal+glm::vec3(1.0f))/2.0f;
-
-	return glm::vec4(sphereColor,1.0f);
 	
+}
+
+Renderer::HitPayload Renderer::ClosestHit(const Ray& ray, float hitDistance, int objectIndex)
+{
+	Renderer::HitPayload payload;
+	payload.HitDistance = hitDistance;
+	payload.ObjectIndex = objectIndex;
+	const Sphere& sphere = m_ActiveScene->Spheres[objectIndex];
+	glm::vec3 origin = ray.Origin - sphere.Position + ray.Direction * hitDistance;
+	payload.WorldNormal=glm::normalize(origin);
+	payload.WorldPosition = origin + sphere.Position;
+
+	return payload;
+}
+
+Renderer::HitPayload Renderer::Miss(const Ray& ray)
+{
+	Renderer::HitPayload payload;
+	payload.HitDistance = -1.0f;
+	return payload;
 }
