@@ -1,6 +1,6 @@
 #include "Renderer.h"
 #include "Walnut/Random.h"
-
+#include <execution>
 namespace Utils {
 	static uint32_t ConvertToRGBA(const glm::vec4& color) {
 		uint8_t r = (uint8_t)(color.r * 255.0f);
@@ -28,23 +28,68 @@ void Renderer::onResize(uint32_t width, uint32_t height)
 
 	delete[] m_ImageData;
 	m_ImageData = new uint32_t[width * height];
+
+	delete[] m_AccumulationData;
+	m_AccumulationData = new glm::vec4[width * height];
+
+	ResetFrameIndex();
+
+	m_ImageHorizontalIter.resize(width);
+	m_ImageVerticalIter.resize(height);
+	for (uint32_t i = 0; i < width; i++) {
+		m_ImageHorizontalIter[i] = i;
+	}
+	for (uint32_t i = 0; i < height; i++) {
+		m_ImageVerticalIter[i] = i;
+	}
 }
 
 void Renderer::Render(const Scene& scene, const Camera& camera)
 {
 	m_ActiveScene = &scene;
 	m_ActiveCamera = &camera;
+	if (m_FrameIndex == 1) {
+		memset(m_AccumulationData, 0, m_FinalImage->GetWidth() * m_FinalImage->GetHeight() * sizeof(glm::vec4));
+	}
 
+	
+	// multi threading
+	std::for_each(std::execution::par, m_ImageVerticalIter.begin(), m_ImageVerticalIter.end(),
+		[this](uint32_t y) {
+			std::for_each(std::execution::par, m_ImageHorizontalIter.begin(), m_ImageHorizontalIter.end(), [this, y](uint32_t x) {
+
+				glm::vec4 color = PerPixel(x, y);
+				m_AccumulationData[x + y * m_FinalImage->GetWidth()] += color;
+
+				glm::vec4 averageColor = m_AccumulationData[x + y * m_FinalImage->GetWidth()] / (float)m_FrameIndex;
+
+				averageColor = glm::clamp(averageColor, glm::vec4(0.0f), glm::vec4(1.0f));
+				m_ImageData[x + y * m_FinalImage->GetWidth()] = Utils::ConvertToRGBA(averageColor);
+			});
+	});
+	/*
 	for (uint32_t y = 0; y < m_FinalImage->GetHeight(); y++) {
 		for (uint32_t x = 0; x < m_FinalImage->GetWidth(); x++) {
+			
 			glm::vec4 color = PerPixel(x,y);
-			color = glm::clamp(color, glm::vec4(0.0f), glm::vec4(1.0f));
-			m_ImageData[x + y * m_FinalImage->GetWidth()] = Utils::ConvertToRGBA(color);
+			m_AccumulationData[x + y * m_FinalImage->GetWidth()] += color;
+			
+			glm::vec4 averageColor = m_AccumulationData[x + y * m_FinalImage->GetWidth()] / (float)m_FrameIndex;
+
+			averageColor = glm::clamp(averageColor, glm::vec4(0.0f), glm::vec4(1.0f));
+			m_ImageData[x + y * m_FinalImage->GetWidth()] = Utils::ConvertToRGBA(averageColor);
 			
 		}
-	}
+	}*/
+
 	m_FinalImage->SetData(m_ImageData);
 
+	if (m_Settings.Accumulate) {
+		m_FrameIndex++;
+	}
+	else {
+		m_FrameIndex = 1;
+	}
 }
 
 glm::vec4 Renderer::PerPixel(uint32_t x, uint32_t y)
@@ -54,7 +99,7 @@ glm::vec4 Renderer::PerPixel(uint32_t x, uint32_t y)
 	ray.Direction = m_ActiveCamera->GetRayDirections()[x + y * m_FinalImage->GetWidth()];
 
 	glm::vec3 color(0.0f);
-	int bounces = 4;
+	int bounces = 2;
 	float multiplier = 0.5f;
 	for (int i = 0; i < bounces; i++) {
 		Renderer::HitPayload payload = TraceRay(ray);
@@ -73,7 +118,7 @@ glm::vec4 Renderer::PerPixel(uint32_t x, uint32_t y)
 		glm::vec3 sphereColor = material.Albedo;
 		sphereColor = sphereColor * deg;
 		color += sphereColor * multiplier;
-		ray.Origin = payload.WorldPosition;
+		ray.Origin = payload.WorldPosition + payload.WorldNormal * 0.001f;
 		ray.Direction = glm::reflect(ray.Direction, payload.WorldNormal + material.Roughness * Walnut::Random::Vec3(-0.5f,0.5f));
 
 		multiplier *= 0.5f;

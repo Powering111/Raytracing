@@ -19,42 +19,38 @@ public:
 		{
 			Sphere sphere;
 			sphere.Position = { 0.0f,0.0f,0.0f };
-			sphere.Radius = 0.5f;
-			sphere.MaterialIndex = 0;
-			m_Scene.Spheres.push_back(sphere);
-		}
-		{
-			Sphere sphere;
-			sphere.Position = { 1.0f,0.0f,-5.0f };
-			sphere.Radius = 1.5f;
-			sphere.MaterialIndex = 0;
-			m_Scene.Spheres.push_back(sphere);
-		}
-		{
-			Sphere sphere;
-			sphere.Position = { 3.0f,1.0f,0.0f };
-			sphere.Radius = 0.5f;
-			sphere.MaterialIndex = 0;
-			m_Scene.Spheres.push_back(sphere);
-		}
-		{
-			Sphere sphere;
-			sphere.Position = { 0.0f,-1.0f,-3.0f };
 			sphere.Radius = 1.0f;
 			sphere.MaterialIndex = 0;
 			m_Scene.Spheres.push_back(sphere);
 		}
 		{
+			Sphere sphere;
+			sphere.Position = { 0.0f,-101.0f,0.0f };
+			sphere.Radius = 100.0f;
+			sphere.MaterialIndex = 1;
+			m_Scene.Spheres.push_back(sphere);
+		}
+		
+		{
 			Material material;
-			material.Albedo = { 1.0f,1.0f,1.0f };
+			material.Albedo = { 1.0f,0.0f,1.0f };
 			material.Roughness = 1.0f;
+			material.Metallic = 0.0f;
+			m_Scene.Materials.push_back(material);
+		}
+		{
+			Material material;
+			material.Albedo = { 0.0f,1.0f,1.0f };
+			material.Roughness = 0.1f;
 			material.Metallic = 0.0f;
 			m_Scene.Materials.push_back(material);
 		}
 	}
 
 	virtual void OnUpdate(float ts) override {
-		m_Camera.OnUpdate(ts);
+		if (m_Camera.OnUpdate(ts)) {
+			m_Renderer.ResetFrameIndex();
+		}
 	}
 	
 	virtual void OnUIRender() override
@@ -62,6 +58,10 @@ public:
 		// Menu window
 		ImGui::Begin("Menu");
 		ImGui::Checkbox("Render", &m_Render);
+		ImGui::Checkbox("Accumulate", &m_Renderer.GetSettings().Accumulate);
+		if (ImGui::Button("Reset")) {
+			m_Renderer.ResetFrameIndex();
+		}
 		ImGui::Text("Rendering Time : %.3fms (%.1f FPS)", m_LastRenderTime, 1000.0f / m_LastRenderTime);
 		ImGui::Text("Right Click and drag to rotate camera");
 		ImGui::Text("W, A, S, D, E, Q to move around");

@@ -7,6 +7,10 @@
 #include <glm/glm.hpp>
 class Renderer {
 public:
+	struct Settings {
+		bool Accumulate = true;
+	};
+
 	Renderer() = default;
 
 	void onResize(uint32_t width, uint32_t height);
@@ -14,8 +18,9 @@ public:
 
 	std::shared_ptr<Walnut::Image> GetFinalImage() const { return m_FinalImage; }
 
+	void ResetFrameIndex() { m_FrameIndex = 1; }
+	Settings& GetSettings() { return m_Settings; }
 	glm::vec3 lightDir=glm::vec3(-1.0f,-1.0f,-1.0f);
-
 private:
 	struct HitPayload {
 		float HitDistance;
@@ -35,4 +40,10 @@ private:
 	const Camera* m_ActiveCamera=nullptr;
 
 	uint32_t* m_ImageData = nullptr;
+	glm::vec4* m_AccumulationData = nullptr;
+
+	uint32_t m_FrameIndex = 1;
+	Settings m_Settings;
+
+	std::vector<uint32_t> m_ImageHorizontalIter, m_ImageVerticalIter;
 };
